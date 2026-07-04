@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Log in</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="auth-left">
+    <div class="navbar-brand"><i class="bi bi-ticket-perforated"></i> FOYER</div>
+    <div class="auth-quote">Step inside.<br>Every booking here<br>is a ticket worth keeping.</div>
+    <div style="font-size:12px;color:var(--text-on-ink-soft);">Music · Talks · Studios · Dinners · Runs</div>
+  </div>
+
+  <div class="auth-right">
+    <div style="width:100%;max-width:380px;">
+      <div class="eyebrow">Welcome back</div>
+      <h1 class="ff-display fw-bold mb-1" style="font-size:28px;">Log in to Foyer</h1>
+      <p class="text-muted mb-4" style="font-size:13px;">Use the mobile number on your account.</p>
+
+      <form id="loginForm">
+        <div class="mb-3">
+          <label class="form-label-foyer d-block mb-1">Mobile number</label>
+          <input type="tel" class="form-control" id="mob" placeholder="9876543210" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label-foyer d-block mb-1">Password</label>
+          <div class="position-relative">
+            <input type="password" class="form-control pe-5" id="password" placeholder="••••••••" required>
+            <button type="button" id="togglePw" class="btn position-absolute top-50 end-0 translate-middle-y border-0 text-muted" style="padding:4px 10px;"><i class="bi bi-eye"></i></button>
+          </div>
+        </div>
+
+        <div id="errorBox" class="text-danger mb-2" style="font-size:12px;display:none;"><i class="bi bi-exclamation-circle"></i> <span id="errorText"></span></div>
+
+        <button type="submit" class="btn btn-accent w-100 mt-2" id="loginBtn"><i class="bi bi-lock"></i> Log in</button>
+
+        <p class="text-center text-muted mt-3" style="font-size:12.5px;">
+          New here? <a href="register.html" class="fw-bold" style="color:var(--accent-2);">Create an account</a>
+        </p>
+        <p class="text-center text-muted mt-3" style="font-size:11px;">
+          Demo mobile: 9876543210 (attendee) or 9123456789 (organizer) · any password
+        </p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  if (getToken()) window.location.href = "index.html";
+
+  document.getElementById("togglePw").addEventListener("click", () => {
+    const pw = document.getElementById("password");
+    const icon = document.querySelector("#togglePw i");
+    if (pw.type === "password"){ pw.type = "text"; icon.className = "bi bi-eye-slash"; }
+    else { pw.type = "password"; icon.className = "bi bi-eye"; }
+  });
+
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const mob = document.getElementById("mob").value.trim();
+    const password = document.getElementById("password").value;
+    const btn = document.getElementById("loginBtn");
+    const errBox = document.getElementById("errorBox");
+    errBox.style.display = "none";
+    btn.disabled = true; btn.innerHTML = `<span class="spinner-foyer" style="width:14px;height:14px;border-width:2px;"></span> Logging in…`;
+
+    const res = await apiLogin(mob, password);
+
+    btn.disabled = false; btn.innerHTML = `<i class="bi bi-lock"></i> Log in`;
+    if (res.error){
+      document.getElementById("errorText").textContent = res.error;
+      errBox.style.display = "block";
+      return;
+    }
+    setSession(res.token, res.user);
+    window.location.href = "index.html";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Create Event</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="d-flex">
+  <div id="sidebar"></div>
+  <div class="flex-grow-1" style="min-width:0;">
+    <div class="page-narrow">
+      <div class="eyebrow">New listing</div>
+      <h1 class="ff-display fw-bold mb-4" style="font-size:26px;">Create an event</h1>
+
+      <form id="eventForm">
+        <div class="mb-3">
+          <label class="form-label-foyer d-block mb-1">Title</label>
+          <input class="form-control" id="title" placeholder="e.g. Midnight Frequencies — Live Set" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label-foyer d-block mb-1">Description</label>
+          <textarea class="form-control" id="description" rows="4" placeholder="What's happening, who it's for, what to expect…" required></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label-foyer d-block mb-1">Cover image</label>
+          <input class="form-control" type="file" id="imageFile" accept="image/*">
+          <div class="form-text" style="font-size:11.5px;">This is the hero image shown on the event card and detail page.</div>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label-foyer mb-0">Additional photos & video</label>
+            <button type="button" class="btn btn-outline-foyer btn-sm" id="addMediaBtn"><i class="bi bi-plus"></i> Add media</button>
+          </div>
+          <div class="form-text mb-2" style="font-size:11.5px;">Add image links or a YouTube link to build a gallery on the event page.</div>
+          <div id="mediaRows"></div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label-foyer d-block mb-1">Category</label>
+          <select class="form-select" id="category"></select>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6"><label class="form-label-foyer d-block mb-1">Starts</label><input class="form-control" type="datetime-local" id="start_date" required></div>
+          <div class="col-6"><label class="form-label-foyer d-block mb-1">Ends</label><input class="form-control" type="datetime-local" id="end_date" required></div>
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="is_online">
+          <label class="form-check-label" for="is_online" style="font-size:13px;">This is an online event</label>
+        </div>
+
+        <div class="mb-3" id="locationField">
+          <label class="form-label-foyer d-block mb-1">Location</label>
+          <input class="form-control" id="location" placeholder="Venue name & address">
+        </div>
+        <div class="mb-3 d-none" id="onlineLinkField">
+          <label class="form-label-foyer d-block mb-1">Online link</label>
+          <input class="form-control" id="online_link" placeholder="https://meet.example.com/…">
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label-foyer d-block mb-1">Capacity</label>
+            <input class="form-control" type="number" min="0" id="capacity" placeholder="0 = unlimited" value="0">
+          </div>
+          <div class="col-6">
+            <label class="form-label-foyer d-block mb-1">Visibility on save</label>
+            <select class="form-select" id="status">
+              <option value="draft">Save as draft</option>
+              <option value="published">Publish immediately</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="is_free" checked>
+          <label class="form-check-label" for="is_free" style="font-size:13px;">This event is free</label>
+        </div>
+
+        <div class="mb-3 d-none" id="priceField">
+          <label class="form-label-foyer d-block mb-1">Price (USD)</label>
+          <input class="form-control" type="number" min="0" step="0.01" id="price" value="0">
+        </div>
+
+        <button type="submit" class="btn btn-accent w-100 mt-2" id="submitBtn"><i class="bi bi-plus-circle"></i> Save draft</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireOrganizer();
+  renderSidebar("createEvent");
+
+  // category select, populated from your event_category endpoint
+  apiFetchCategories().then(cats => {
+    document.getElementById("category").innerHTML = cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  });
+
+  document.getElementById("is_online").addEventListener("change", (e) => {
+    document.getElementById("locationField").classList.toggle("d-none", e.target.checked);
+    document.getElementById("onlineLinkField").classList.toggle("d-none", !e.target.checked);
+  });
+  document.getElementById("is_free").addEventListener("change", (e) => {
+    document.getElementById("priceField").classList.toggle("d-none", e.target.checked);
+  });
+  document.getElementById("status").addEventListener("change", (e) => {
+    document.getElementById("submitBtn").innerHTML = e.target.value === "published"
+      ? `<i class="bi bi-megaphone"></i> Publish event` : `<i class="bi bi-plus-circle"></i> Save draft`;
+  });
+
+  // ---- media gallery rows ----
+  let mediaRows = [];
+  function renderMediaRows(){
+    document.getElementById("mediaRows").innerHTML = mediaRows.map((m, i) => `
+      <div class="d-flex gap-2 mb-2">
+        <select class="form-select" style="width:120px;flex-shrink:0;" data-mtype="${i}">
+          <option value="image" ${m.type==='image'?'selected':''}>Image</option>
+          <option value="video" ${m.type==='video'?'selected':''}>Video file</option>
+          <option value="youtube" ${m.type==='youtube'?'selected':''}>YouTube</option>
+        </select>
+        <input class="form-control" placeholder="https://…" value="${esc(m.url)}" data-murl="${i}">
+        <button type="button" class="btn btn-outline-foyer" data-mdel="${i}"><i class="bi bi-trash"></i></button>
+      </div>`).join("");
+
+    document.querySelectorAll("[data-mtype]").forEach(s => s.addEventListener("change", e => { mediaRows[+e.target.dataset.mtype].type = e.target.value; }));
+    document.querySelectorAll("[data-murl]").forEach(i => i.addEventListener("input", e => { mediaRows[+e.target.dataset.murl].url = e.target.value; }));
+    document.querySelectorAll("[data-mdel]").forEach(b => b.addEventListener("click", e => { mediaRows.splice(+e.currentTarget.dataset.mdel, 1); renderMediaRows(); }));
+  }
+  document.getElementById("addMediaBtn").addEventListener("click", () => { mediaRows.push({type:"image", url:""}); renderMediaRows(); });
+
+  document.getElementById("eventForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const status = document.getElementById("status").value;
+    const isFree = document.getElementById("is_free").checked;
+    const isOnline = document.getElementById("is_online").checked;
+
+    const payload = {
+      title: document.getElementById("title").value,
+      description: document.getElementById("description").value,
+      category: document.getElementById("category").value,
+      start_date: document.getElementById("start_date").value,
+      end_date: document.getElementById("end_date").value,
+      is_online: isOnline,
+      location: isOnline ? "" : document.getElementById("location").value,
+      online_link: isOnline ? document.getElementById("online_link").value : "",
+      capacity: parseInt(document.getElementById("capacity").value || 0, 10),
+      status: status,
+      is_free: isFree,
+      price: isFree ? 0 : parseFloat(document.getElementById("price").value || 0),
+      media: mediaRows,
+      image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200", // placeholder until file upload is wired to backend
+    };
+
+    const btn = document.getElementById("submitBtn");
+    btn.disabled = true; btn.innerHTML = `<span class="spinner-foyer" style="width:14px;height:14px;border-width:2px;"></span> Saving…`;
+
+    await apiCreateEvent(payload);
+
+    showToast(status === "published" ? "Event published." : "Draft saved.");
+    setTimeout(() => window.location.href = "dashboard.html", 600);
+  });
+</script>
+</body>
+</html>

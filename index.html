@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Browse Events</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="topnav"></div>
+
+<div class="page-wide">
+  <div class="eyebrow">This week at Foyer</div>
+  <h1 class="ff-display fw-bold mb-2" style="font-size:36px;max-width:640px;line-height:1.1;">Find the room worth showing up for.</h1>
+  <p class="text-muted mb-4" style="max-width:520px;font-size:14px;">Music, talks, studios, and dinners — every listing here ends in a ticket you actually keep.</p>
+
+  <div class="d-flex flex-wrap gap-2 mb-4" id="categoryFilters"></div>
+
+  <div id="resultsArea">
+    <div class="text-center py-5"><span class="spinner-foyer"></span></div>
+  </div>
+</div>
+
+<div id="chatWidget"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireAuth();
+  renderTopNav("home");
+  renderChatWidget();
+
+  const params = new URLSearchParams(window.location.search);
+  let search = params.get("q") || "";
+  let activeCategory = "all";
+  let allEvents = [];
+
+  function renderCategoryChips(){
+    const cats = ["all", ...new Set(allEvents.map(e => e.category))];
+    document.getElementById("categoryFilters").innerHTML = cats.map(c => `
+      <button class="btn btn-sm ${activeCategory===c ? 'btn-ink' : 'btn-outline-foyer'}" data-cat="${esc(c)}">
+        ${c === "all" ? "All" : esc(c)}
+      </button>`).join("");
+    document.querySelectorAll("[data-cat]").forEach(btn => {
+      btn.addEventListener("click", () => { activeCategory = btn.dataset.cat; renderCategoryChips(); renderResults(); });
+    });
+  }
+
+  function renderResults(){
+    const filtered = allEvents.filter(e => {
+      const matchesSearch = !search || e.title.toLowerCase().includes(search.toLowerCase()) || e.location.toLowerCase().includes(search.toLowerCase());
+      const matchesCat = activeCategory === "all" || e.category === activeCategory;
+      return matchesSearch && matchesCat;
+    });
+    const area = document.getElementById("resultsArea");
+    if (filtered.length === 0){
+      area.innerHTML = `<div class="empty-state"><i class="bi bi-funnel" style="font-size:26px;opacity:.5;"></i>
+        <div class="fw-bold text-dark mt-2">No events match that search.</div>
+        <div style="font-size:13px;" class="mt-1">Try a different keyword or clear your filters.</div></div>`;
+      return;
+    }
+    const [featured, ...rest] = filtered;
+    area.innerHTML = `
+      <div class="mb-2" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2);">
+        <i class="bi bi-stars"></i> Featured
+      </div>
+      <div class="mb-4">${eventCardHtml(featured)}</div>
+      <div>${rest.map(eventCardHtml).join("")}</div>`;
+  }
+
+  apiFetchEvents().then(events => {
+    allEvents = events;
+    renderCategoryChips();
+    renderResults();
+  });
+</script>
+</body>
+</html>

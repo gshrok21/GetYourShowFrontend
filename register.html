@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Create account</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="auth-left">
+    <div class="navbar-brand"><i class="bi bi-ticket-perforated"></i> FOYER</div>
+    <div class="auth-quote">Run an event,<br>or just show up.<br>Either way, you'll need a pass.</div>
+    <div style="font-size:12px;color:var(--text-on-ink-soft);">Free to join · No fees to attend free events</div>
+  </div>
+
+  <div class="auth-right">
+    <div style="width:100%;max-width:400px;">
+      <div class="eyebrow">Get started</div>
+      <h1 class="ff-display fw-bold mb-1" style="font-size:28px;">Create your account</h1>
+      <p class="text-muted mb-4" style="font-size:13px;">Takes under a minute.</p>
+
+      <form id="registerForm">
+        <div class="row g-2 mb-3">
+          <div class="col-6"><label class="form-label-foyer d-block mb-1">First name</label><input class="form-control" id="first_name" required></div>
+          <div class="col-6"><label class="form-label-foyer d-block mb-1">Last name</label><input class="form-control" id="last_name" required></div>
+        </div>
+        <div class="mb-3"><label class="form-label-foyer d-block mb-1">Username</label><input class="form-control" id="username" required></div>
+        <div class="mb-3"><label class="form-label-foyer d-block mb-1">Email</label><input type="email" class="form-control" id="email" required></div>
+        <div class="row g-2 mb-3">
+          <div class="col-6"><label class="form-label-foyer d-block mb-1">Mobile number</label><input type="tel" class="form-control" id="mob" required></div>
+          <div class="col-6"><label class="form-label-foyer d-block mb-1">Password</label><input type="password" class="form-control" id="password" required></div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="is_seller">
+          <label class="form-check-label" for="is_seller" style="font-size:13px;">I'm signing up to organize events, not just attend them</label>
+        </div>
+
+        <div id="errorBox" class="text-danger mb-2" style="font-size:12px;display:none;"><i class="bi bi-exclamation-circle"></i> <span id="errorText"></span></div>
+
+        <button type="submit" class="btn btn-accent w-100" id="registerBtn"><i class="bi bi-stars"></i> Create account</button>
+
+        <p class="text-center text-muted mt-3" style="font-size:12.5px;">
+          Already have an account? <a href="login.html" class="fw-bold" style="color:var(--accent-2);">Log in</a>
+        </p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  if (getToken()) window.location.href = "index.html";
+
+  document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      first_name: document.getElementById("first_name").value.trim(),
+      last_name: document.getElementById("last_name").value.trim(),
+      username: document.getElementById("username").value.trim(),
+      email: document.getElementById("email").value.trim(),
+      mob: document.getElementById("mob").value.trim(),
+      password: document.getElementById("password").value,
+      is_seller: document.getElementById("is_seller").checked,
+    };
+    const btn = document.getElementById("registerBtn");
+    const errBox = document.getElementById("errorBox");
+    errBox.style.display = "none";
+    btn.disabled = true; btn.innerHTML = `<span class="spinner-foyer" style="width:14px;height:14px;border-width:2px;"></span> Creating…`;
+
+    const res = await apiRegisterUser(payload);
+
+    btn.disabled = false; btn.innerHTML = `<i class="bi bi-stars"></i> Create account`;
+    if (res.error){
+      document.getElementById("errorText").textContent = res.error;
+      errBox.style.display = "block";
+      return;
+    }
+    setSession(res.token, res.user);
+    window.location.href = "index.html";
+  });
+</script>
+</body>
+</html>

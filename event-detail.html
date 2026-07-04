@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Event</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="topnav"></div>
+
+<div class="page-wide" id="content">
+  <div class="text-center py-5"><span class="spinner-foyer"></span></div>
+</div>
+
+<div id="chatWidget"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireAuth();
+  renderTopNav("home");
+  renderChatWidget();
+
+  const slug = new URLSearchParams(window.location.search).get("slug");
+  let currentEvent = null;
+  let myBookings = [];
+
+  function mediaEmbedHtml(item){
+    if (item.type === "youtube"){
+      const id = item.url.split("v=")[1]?.split("&")[0] || item.url.split("/").pop();
+      return `<iframe src="https://www.youtube.com/embed/${id}" title="event video" frameborder="0" allowfullscreen></iframe>`;
+    }
+    if (item.type === "video") return `<video src="${esc(item.url)}" controls></video>`;
+    return `<img src="${esc(item.url)}" alt="">`;
+  }
+
+  function render(){
+    const alreadyBooked = myBookings.some(b => b.event && b.event.id === currentEvent.id && b.status !== "cancelled");
+    const spotsFilled = currentEvent.capacity > 0 ? Math.floor(currentEvent.capacity * 0.71) : null;
+    const pct = currentEvent.capacity > 0 ? Math.min(100, Math.round((spotsFilled / currentEvent.capacity) * 100)) : null;
+
+    document.getElementById("content").innerHTML = `
+      <a href="index.html" class="btn btn-outline-foyer btn-sm mb-3"><i class="bi bi-arrow-left"></i> Back to browse</a>
+
+      <div class="rounded-4 overflow-hidden mb-4 position-relative" style="height:320px;background-image:url('${esc(currentEvent.image)}');background-size:cover;background-position:center;">
+        <div style="position:absolute;inset:0;background:linear-gradient(to top, rgba(20,22,27,.75), transparent 50%);"></div>
+        <div style="position:absolute;bottom:18px;left:22px;color:#fff;">
+          <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px;">${esc(currentEvent.category)}</div>
+          <h1 class="ff-display fw-bold" style="font-size:30px;">${esc(currentEvent.title)}</h1>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-lg-7">
+          <h3 class="fw-bold" style="font-size:15px;">About this event</h3>
+          <p class="text-muted" style="font-size:14px;line-height:1.7;">${esc(currentEvent.description)}</p>
+
+          ${currentEvent.media && currentEvent.media.length > 0 ? `
+            <h3 class="fw-bold mt-4" style="font-size:15px;">Photos & video</h3>
+            <div class="media-grid">${currentEvent.media.map(mediaEmbedHtml).join("")}</div>
+          ` : ``}
+
+          <h3 class="fw-bold mt-4 mb-2" style="font-size:15px;">Organizer</h3>
+          <div class="d-flex align-items-center gap-2">
+            <div class="avatar-circle" style="background:var(--ink);color:var(--accent);">${initials(currentEvent.organizer)}</div>
+            <div>
+              <div class="fw-bold" style="font-size:13.5px;">${esc(currentEvent.organizer)}</div>
+              <div class="text-muted" style="font-size:11.5px;">Verified organizer</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div class="card-foyer" style="position:sticky;top:90px;">
+            <div class="d-flex justify-content-between align-items-baseline mb-3">
+              <span class="ff-mono fw-bold" style="font-size:22px;">${currentEvent.is_free ? "Free" : fmtMoney(currentEvent.price)}</span>
+              ${currentEvent.is_free ? "" : `<span class="text-muted" style="font-size:11px;">per ticket</span>`}
+            </div>
+
+            <div class="d-flex gap-2 mb-3" style="font-size:13px;">
+              <i class="bi bi-calendar3" style="color:var(--accent-2);margin-top:2px;"></i>
+              <div>
+                <div class="fw-semibold">${fmtDate(currentEvent.start_date)}</div>
+                <div class="text-muted" style="font-size:12px;">${fmtTime(currentEvent.start_date)} – ${fmtTime(currentEvent.end_date)}</div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mb-3" style="font-size:13px;">
+              <i class="bi ${currentEvent.is_online ? 'bi-globe' : 'bi-geo-alt'}" style="color:var(--accent-2);margin-top:2px;"></i>
+              <div class="fw-semibold">${currentEvent.is_online ? "Online — link sent after registration" : esc(currentEvent.location)}</div>
+            </div>
+
+            ${currentEvent.capacity > 0 ? `
+              <div class="mb-3">
+                <div class="progress-foyer"><div class="bar" style="width:${pct}%;background:${pct>85?'var(--cancelled)':'var(--accent)'};"></div></div>
+                <div class="text-muted mt-1" style="font-size:11.5px;">${spotsFilled} / ${currentEvent.capacity} spots filled</div>
+              </div>` : ``}
+
+            <div id="ctaArea">
+              ${alreadyBooked ? `
+                <div class="text-center p-3 rounded-3" style="background:var(--paper-2);font-size:12.5px;color:var(--text-soft);">
+                  <i class="bi bi-check-circle-fill" style="color:var(--confirmed);font-size:18px;"></i>
+                  <div class="mt-1">You're already registered for this one — check My Bookings.</div>
+                </div>` : `
+                <button class="btn btn-accent w-100" id="reserveBtn"><i class="bi bi-ticket-perforated"></i> ${currentEvent.is_free ? "Reserve a spot" : "Get tickets"}</button>
+              `}
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const reserveBtn = document.getElementById("reserveBtn");
+    if (reserveBtn) reserveBtn.addEventListener("click", showConfirmForm);
+  }
+
+  function showConfirmForm(){
+    document.getElementById("ctaArea").innerHTML = `
+      <label class="form-label-foyer d-block mb-1">Anything the organizer should know? (optional)</label>
+      <textarea class="form-control mb-2" id="notesInput" rows="3" placeholder="Dietary needs, accessibility, questions…"></textarea>
+      <button class="btn btn-accent w-100" id="confirmBtn"><i class="bi bi-ticket-perforated"></i> Confirm registration</button>
+      <button class="btn btn-outline-foyer w-100 mt-2" id="cancelConfirmBtn">Cancel</button>`;
+    document.getElementById("cancelConfirmBtn").addEventListener("click", render);
+    document.getElementById("confirmBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("confirmBtn");
+      btn.disabled = true; btn.innerHTML = `<span class="spinner-foyer" style="width:14px;height:14px;border-width:2px;"></span> Booking…`;
+      const notes = document.getElementById("notesInput").value;
+      const booking = await apiRegisterForEvent(currentEvent.id, notes);
+      window.location.href = `ticket.html?id=${booking.id}`;
+    });
+  }
+
+  Promise.all([apiFetchEventBySlug(slug), apiFetchMyBookings()]).then(([ev, bookings]) => {
+    currentEvent = ev; myBookings = bookings; render();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Organizer Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="d-flex">
+  <div id="sidebar"></div>
+  <div class="flex-grow-1" style="min-width:0;">
+    <div class="page-wide">
+      <div class="eyebrow">Organizer</div>
+      <h1 class="ff-display fw-bold mb-4" style="font-size:28px;">Dashboard</h1>
+
+      <div class="row g-3 mb-4" id="statCards"></div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-lg-7">
+          <div class="card-foyer">
+            <h3 class="fw-bold mb-3" style="font-size:14px;">Registrations this week</h3>
+            <canvas id="trendChart" height="180"></canvas>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="card-foyer">
+            <h3 class="fw-bold mb-3" style="font-size:14px;">Status breakdown</h3>
+            <canvas id="statusChart" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="fw-bold" style="font-size:16px;">Your events</h3>
+        <a href="create-event.html" class="btn btn-accent btn-sm"><i class="bi bi-plus"></i> New event</a>
+      </div>
+      <div id="eventsList"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireOrganizer();
+  renderSidebar("dashboard");
+
+  function statCardHtml(label, value, sub, subColor){
+    return `<div class="col-6 col-lg-3"><div class="stat-card">
+      <div class="stat-label">${esc(label)}</div>
+      <div class="stat-value">${esc(value)}</div>
+      <div class="mt-1" style="font-size:12px;color:${subColor||'var(--text-soft)'};">${esc(sub)}</div>
+    </div></div>`;
+  }
+
+  function eventRowHtml(e){
+    return `
+    <div class="card-foyer d-flex align-items-center gap-3 mb-2">
+      <div style="width:56px;height:56px;border-radius:8px;background-image:url('${esc(e.image)}');background-size:cover;flex-shrink:0;"></div>
+      <div class="flex-grow-1" style="min-width:0;">
+        <div class="fw-bold" style="font-size:14px;">${esc(e.title)}</div>
+        <div class="text-muted" style="font-size:12px;">${fmtDate(e.start_date)} · ${e.is_online ? "Online" : esc(e.location)}</div>
+      </div>
+      ${pillHtml(e.status === "published" ? "confirmed" : e.status === "cancelled" ? "cancelled" : "pending")}
+      <a href="event-registrations.html?slug=${encodeURIComponent(e.slug)}" class="btn btn-outline-foyer btn-sm">Registrations <i class="bi bi-chevron-right"></i></a>
+    </div>`;
+  }
+
+  Promise.all([apiFetchMyEvents(), apiFetchOrgRevenue()]).then(([events, revenue]) => {
+    const totalRevenue = revenue.reduce((s,r)=>s+r.revenue,0);
+    const totalSold = revenue.reduce((s,r)=>s+r.sold,0);
+
+    document.getElementById("statCards").innerHTML = [
+      statCardHtml("Live events", events.length, "2 published this month"),
+      statCardHtml("Registrations", totalSold, "↑ 18% vs last week", "var(--confirmed)"),
+      statCardHtml("Revenue", "$"+totalRevenue.toLocaleString(), "Across all events"),
+      statCardHtml("Avg. fill rate", "78%", "Across active listings"),
+    ].join("");
+
+    document.getElementById("eventsList").innerHTML = events.map(eventRowHtml).join("");
+
+    new Chart(document.getElementById("trendChart"), {
+      type: "line",
+      data: {
+        labels: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+        datasets: [{ data: DEMO.regTrend, borderColor:"#e3a13a", backgroundColor:"rgba(227,161,58,.15)", fill:true, tension:.35, pointBackgroundColor:"#e3a13a" }]
+      },
+      options: { plugins:{legend:{display:false}}, scales:{ y:{grid:{color:"#e4dcc6"}}, x:{grid:{display:false}} } }
+    });
+
+    const sb = DEMO.statusBreakdown;
+    new Chart(document.getElementById("statusChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["Confirmed","Waitlisted","Attended","Cancelled"],
+        datasets: [{ data:[sb.confirmed, sb.waitlisted, sb.attended, sb.cancelled], backgroundColor:["#4a7c59","#b5832e","#5b86b3","#b14a4a"] }]
+      },
+      options: { plugins:{ legend:{ position:"bottom", labels:{ boxWidth:8, font:{size:11} } } } }
+    });
+  });
+</script>
+</body>
+</html>

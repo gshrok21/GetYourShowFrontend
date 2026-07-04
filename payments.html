@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Payments</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+.table-foyer th{ font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);padding:10px 12px;border-bottom:1.5px solid var(--line);font-weight:700; }
+.table-foyer td{ padding:13px 12px;border-bottom:1px solid var(--line-soft);font-size:13px;vertical-align:middle; }
+.table-foyer tr:last-child td{ border-bottom:none; }
+</style>
+</head>
+<body id="pageBody">
+
+<!-- orgMode: sidebar layout / attendee: topnav layout — determined by JS below -->
+<div id="orgLayout" class="d-flex" style="display:none!important;">
+  <div id="sidebar"></div>
+  <div class="flex-grow-1" style="min-width:0;">
+    <div class="page-wide" id="orgContent"></div>
+  </div>
+</div>
+
+<div id="attendeeLayout" style="display:none;">
+  <div id="topnav"></div>
+  <div class="page-wide" id="attendeeContent"></div>
+  <div id="chatWidget"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireAuth();
+  const isOrg = new URLSearchParams(window.location.search).get("org") === "1";
+  const user = getUser();
+
+  if (isOrg && user.is_seller){
+    document.getElementById("orgLayout").style.setProperty("display","flex","important");
+    renderSidebar("payments");
+    loadOrgPayments();
+  } else {
+    document.getElementById("attendeeLayout").style.display = "block";
+    renderTopNav("payments");
+    renderChatWidget();
+    loadAttendeePayments();
+  }
+
+  function statHtml(label, value, color){
+    return `<div class="col-12 col-md-4"><div class="stat-card">
+      <div class="stat-label">${esc(label)}</div>
+      <div class="stat-value" style="color:${color||'var(--text)'};">${esc(value)}</div>
+    </div></div>`;
+  }
+
+  function loadOrgPayments(){
+    const wrap = document.getElementById("orgContent");
+    wrap.innerHTML = `<div class="eyebrow">Organizer</div><h1 class="ff-display fw-bold mb-4" style="font-size:26px;">Payouts</h1>
+      <div class="text-center py-4"><span class="spinner-foyer"></span></div>`;
+
+    apiFetchOrgRevenue().then(revenue => {
+      const totalRevenue = revenue.reduce((s,r)=>s+r.revenue,0);
+      const paidOut      = revenue.filter(r=>r.payout==="paid").reduce((s,r)=>s+r.revenue,0);
+      const pending      = totalRevenue - paidOut;
+
+      wrap.innerHTML = `
+        <div class="eyebrow">Organizer</div>
+        <h1 class="ff-display fw-bold mb-4" style="font-size:26px;">Payouts</h1>
+
+        <div class="row g-3 mb-4">
+          ${statHtml("Total revenue","$"+totalRevenue.toLocaleString())}
+          ${statHtml("Paid out","$"+paidOut.toLocaleString(),"var(--confirmed)")}
+          ${statHtml("Pending payout","$"+pending.toLocaleString(),"var(--waitlisted)")}
+        </div>
+
+        <div class="mb-4">
+          <canvas id="revenueChart" height="140"></canvas>
+        </div>
+
+        <div class="card-foyer p-0 overflow-hidden">
+          <table class="table table-foyer w-100 mb-0">
+            <thead><tr><th>Event</th><th>Tickets sold</th><th>Capacity</th><th>Revenue</th><th>Payout status</th></tr></thead>
+            <tbody>
+              ${revenue.map(r=>`
+                <tr>
+                  <td class="fw-semibold">${esc(r.event)}</td>
+                  <td>${r.sold}</td>
+                  <td class="text-muted">${r.capacity}</td>
+                  <td class="ff-mono fw-bold">$${r.revenue.toLocaleString()}</td>
+                  <td>${pillHtml(r.payout==="paid"?"paid":"pending")}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+
+      new Chart(document.getElementById("revenueChart"),{
+        type:"bar",
+        data:{
+          labels: revenue.map(r => r.event.length > 30 ? r.event.slice(0,28)+"…" : r.event),
+          datasets:[{ label:"Revenue ($)", data:revenue.map(r=>r.revenue), backgroundColor:"#e3a13a", borderRadius:6 }]
+        },
+        options:{ plugins:{legend:{display:false}}, scales:{ y:{grid:{color:"#e4dcc6"}}, x:{grid:{display:false}} } }
+      });
+    });
+  }
+
+  function loadAttendeePayments(){
+    const wrap = document.getElementById("attendeeContent");
+    wrap.innerHTML = `<div class="eyebrow">Billing</div><h1 class="ff-display fw-bold mb-4" style="font-size:26px;">Payments</h1>
+      <div class="text-center py-4"><span class="spinner-foyer"></span></div>`;
+
+    apiFetchPayments().then(payments => {
+      if (payments.length === 0){
+        wrap.innerHTML = `<div class="eyebrow">Billing</div><h1 class="ff-display fw-bold mb-4" style="font-size:26px;">Payments</h1>
+          <div class="empty-state"><i class="bi bi-credit-card" style="font-size:26px;opacity:.5;"></i>
+          <div class="fw-bold text-dark mt-2">No payments yet.</div>
+          <div style="font-size:13px;" class="mt-1">Paid event tickets you book will show up here.</div></div>`;
+        return;
+      }
+
+      const totalPaid = payments.filter(p=>p.status==="paid").reduce((s,p)=>s+p.amount,0);
+
+      wrap.innerHTML = `
+        <div class="eyebrow">Billing</div>
+        <h1 class="ff-display fw-bold mb-4" style="font-size:26px;">Payments</h1>
+
+        <div class="row g-3 mb-4">
+          ${statHtml("Total spent",fmtMoney(totalPaid))}
+          ${statHtml("Transactions",payments.length)}
+        </div>
+
+        <div class="card-foyer p-0 overflow-hidden">
+          <table class="table table-foyer w-100 mb-0">
+            <thead><tr><th>Event</th><th>Amount</th><th>Method</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody>
+              ${payments.map(p=>`
+                <tr>
+                  <td class="fw-semibold">${esc(p.event_title)}</td>
+                  <td class="ff-mono fw-bold">${fmtMoney(p.amount)}</td>
+                  <td class="text-muted">${esc(p.method)}</td>
+                  <td class="text-muted" style="font-size:12px;">${fmtDate(p.date)}</td>
+                  <td>${pillHtml(p.status==="paid"?"paid":"pending")}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    });
+  }
+</script>
+</body>
+</html>

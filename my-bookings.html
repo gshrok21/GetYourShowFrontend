@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — My Bookings</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="topnav"></div>
+
+<div class="page-wide">
+  <div class="eyebrow">Your tickets</div>
+  <h1 class="ff-display fw-bold mb-3" style="font-size:28px;">My Bookings</h1>
+
+  <div class="d-flex flex-wrap gap-2 mb-4" id="statusFilters"></div>
+
+  <div id="resultsArea"><div class="text-center py-5"><span class="spinner-foyer"></span></div></div>
+</div>
+
+<div id="chatWidget"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireAuth();
+  renderTopNav("bookings");
+  renderChatWidget();
+
+  let bookings = [];
+  let activeFilter = "all";
+
+  function filterChips(){
+    const filters = ["all","confirmed","waitlisted","attended","cancelled"];
+    document.getElementById("statusFilters").innerHTML = filters.map(f => `
+      <button class="btn btn-sm ${activeFilter===f?'btn-ink':'btn-outline-foyer'}" data-f="${f}">
+        ${f === "all" ? "All" : (STATUS_LABEL[f] || f)}
+      </button>`).join("");
+    document.querySelectorAll("[data-f]").forEach(btn => btn.addEventListener("click", () => { activeFilter = btn.dataset.f; filterChips(); renderResults(); }));
+  }
+
+  function bookingStubHtml(b){
+    const ev = b.event;
+    return `
+    <div class="stub-card mb-3" style="cursor:pointer;" onclick="window.location.href='ticket.html?id=${b.id}'">
+      <div class="stub-img" style="background-image:url('${esc(ev.image)}')"></div>
+      <div class="stub-perf"><span class="stub-notch top"></span><span class="stub-notch bot"></span></div>
+      <div class="stub-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="stub-eyebrow">${esc(ev.category)}</div>
+            <div class="stub-title">${esc(ev.title)}</div>
+          </div>
+          ${pillHtml(b.status)}
+        </div>
+        <div class="stub-meta">
+          <span><i class="bi bi-calendar3"></i> ${fmtDate(ev.start_date)}</span>
+          <span><i class="bi bi-geo-alt"></i> ${ev.is_online ? "Online" : esc(ev.location)}</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+          <span class="text-muted" style="font-size:11px;">Booked ${fmtDate(b.registered_at)}</span>
+          ${b.status !== "cancelled" ? `<button class="btn btn-sm btn-danger-outline" data-cancel="${b.id}" onclick="event.stopPropagation();">Cancel</button>` : ``}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function renderResults(){
+    const filtered = activeFilter === "all" ? bookings : bookings.filter(b => b.status === activeFilter);
+    const area = document.getElementById("resultsArea");
+    if (filtered.length === 0){
+      area.innerHTML = `<div class="empty-state"><i class="bi bi-ticket-perforated" style="font-size:26px;opacity:.5;"></i>
+        <div class="fw-bold text-dark mt-2">No bookings here yet.</div>
+        <div style="font-size:13px;" class="mt-1">Once you register for something, it'll show up as a ticket right here.</div></div>`;
+      return;
+    }
+    area.innerHTML = filtered.map(bookingStubHtml).join("");
+    document.querySelectorAll("[data-cancel]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.cancel;
+        await apiCancelRegistration(id);
+        bookings = bookings.map(b => String(b.id) === String(id) ? {...b, status:"cancelled"} : b);
+        renderResults();
+        showToast("Booking cancelled.");
+      });
+    });
+  }
+
+  apiFetchMyBookings().then(data => { bookings = data; filterChips(); renderResults(); });
+</script>
+</body>
+</html>

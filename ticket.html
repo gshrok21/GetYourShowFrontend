@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Your Ticket</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .ticket-wrap{ display:flex; background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 20px 50px -20px rgba(20,22,27,.35); }
+  .ticket-main{ flex:1; padding:28px 26px; }
+  .ticket-stub{ width:170px; flex-shrink:0; background:var(--ink); color:var(--text-on-ink); padding:26px 18px; display:flex; flex-direction:column; align-items:center; text-align:center; }
+  @media print{ #topnav, #chatWidget, .no-print{ display:none !important; } body{ background:#fff; } }
+  @media (max-width:600px){ .ticket-wrap{ flex-direction:column; } .ticket-stub{ width:100%; } }
+</style>
+</head>
+<body>
+
+<div id="topnav"></div>
+
+<div class="page-narrow" id="content">
+  <div class="text-center py-5"><span class="spinner-foyer"></span></div>
+</div>
+
+<div id="chatWidget"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireAuth();
+  renderTopNav("bookings");
+  renderChatWidget();
+
+  const id = new URLSearchParams(window.location.search).get("id");
+
+  function statusHeadline(status){
+    if (status === "confirmed") return "You're in.";
+    if (status === "waitlisted") return "You're on the waitlist.";
+    return "Registered.";
+  }
+
+  apiFetchBookingById(id).then(booking => {
+    if (!booking){ document.getElementById("content").innerHTML = `<div class="empty-state">Ticket not found.</div>`; return; }
+    const event = booking.event;
+    document.getElementById("content").innerHTML = `
+      <a href="my-bookings.html" class="btn btn-outline-foyer btn-sm mb-3 no-print"><i class="bi bi-arrow-left"></i> Back</a>
+
+      <div class="text-center mb-3">
+        <i class="bi bi-check-circle-fill" style="color:var(--confirmed);font-size:30px;"></i>
+        <h2 class="fw-bold mt-2" style="font-size:20px;">${statusHeadline(booking.status)}</h2>
+        <p class="text-muted" style="font-size:13px;">Save this ticket — the QR code is your entry.</p>
+      </div>
+
+      <div class="ticket-wrap">
+        <div class="ticket-main">
+          <div class="eyebrow" style="margin-bottom:6px;">${esc(event.category)}</div>
+          <h1 class="ff-display fw-bold" style="font-size:26px;line-height:1.1;">${esc(event.title)}</h1>
+          <div class="text-muted mb-4" style="font-size:12.5px;">${fmtDate(event.start_date)} · ${fmtTime(event.start_date)}</div>
+
+          <div class="row mb-3">
+            <div class="col-6">
+              <div class="text-muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;">Location</div>
+              <div class="ff-display fw-semibold" style="font-size:14.5px;">${event.is_online ? "Online" : esc(event.location)}</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;">Amount paid</div>
+              <div class="ff-mono" style="font-size:14.5px;">${booking.amount_paid ? fmtMoney(booking.amount_paid) : "Free"}</div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center pt-3" style="border-top:1px dashed var(--line);">
+            <div class="ff-display fw-semibold" style="font-size:16px;">You</div>
+            ${pillHtml(booking.status)}
+          </div>
+        </div>
+
+        <div class="ticket-stub">
+          <div style="background:#fff;padding:8px;border-radius:6px;margin-bottom:14px;">
+            <img alt="qr" width="100" height="100" src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(booking.ticket_code)}">
+          </div>
+          <div class="ff-mono mb-3" style="font-size:9px;color:var(--text-on-ink-soft);word-break:break-all;">${esc(booking.ticket_code)}</div>
+          <button class="btn btn-sm w-100 no-print" style="background:transparent;border:1px solid #3a3d47;color:var(--text-on-ink);" onclick="window.print()"><i class="bi bi-download"></i> Save</button>
+        </div>
+      </div>`;
+  });
+</script>
+</body>
+</html>

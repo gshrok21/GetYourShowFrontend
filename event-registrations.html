@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foyer — Event Registrations</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+.table-foyer th{ font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);padding:10px 12px;border-bottom:1.5px solid var(--line);font-weight:700; }
+.table-foyer td{ padding:13px 12px;border-bottom:1px solid var(--line-soft);font-size:13px;vertical-align:middle; }
+.table-foyer tr:last-child td{ border-bottom:none; }
+.table-foyer tr:hover td{ background:#fdf8ec; }
+</style>
+</head>
+<body>
+
+<div class="d-flex">
+  <div id="sidebar"></div>
+  <div class="flex-grow-1" style="min-width:0;">
+    <div class="page-wide">
+
+      <a href="dashboard.html" class="btn btn-outline-foyer btn-sm mb-3"><i class="bi bi-arrow-left"></i> Back to dashboard</a>
+
+      <div id="eventHeader" class="mb-4">
+        <div class="text-center py-4"><span class="spinner-foyer"></span></div>
+      </div>
+
+      <div class="row g-3 mb-4" id="statCards"></div>
+
+      <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+        <div class="fw-bold me-2" style="font-size:14px;">Filter:</div>
+        <div id="filterBtns"></div>
+        <div class="ms-auto">
+          <input class="form-control form-control-sm" id="searchInput" placeholder="Search attendee name…" style="width:220px;">
+        </div>
+      </div>
+
+      <div class="card-foyer p-0 overflow-hidden" id="tableWrap">
+        <div class="text-center py-4"><span class="spinner-foyer"></span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script>
+  requireOrganizer();
+  renderSidebar("dashboard");
+
+  const slug = new URLSearchParams(window.location.search).get("slug");
+  let allRegs = [];
+  let activeStatus = "all";
+
+  function statCardHtml(label, value){
+    return `<div class="col-6 col-lg-3"><div class="stat-card">
+      <div class="stat-label">${esc(label)}</div>
+      <div class="stat-value">${esc(value)}</div>
+    </div></div>`;
+  }
+
+  function renderStats(){
+    const confirmed  = allRegs.filter(r => r.status === "confirmed").length;
+    const waitlisted = allRegs.filter(r => r.status === "waitlisted").length;
+    const checkedIn  = allRegs.filter(r => r.checked_in).length;
+    const revenue    = allRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
+    document.getElementById("statCards").innerHTML = [
+      statCardHtml("Total registrations", allRegs.length),
+      statCardHtml("Confirmed", confirmed),
+      statCardHtml("Checked in", `${checkedIn} / ${confirmed}`),
+      statCardHtml("Revenue", fmtMoney(revenue)),
+    ].join("");
+  }
+
+  function renderFilterBtns(){
+    const statuses = ["all","confirmed","waitlisted","attended","cancelled","no_show"];
+    document.getElementById("filterBtns").innerHTML = statuses.map(s => `
+      <button class="btn btn-sm ${activeStatus===s?'btn-ink':'btn-outline-foyer'} me-1 mb-1" data-s="${s}">
+        ${s === "all" ? "All" : (STATUS_LABEL[s]||s)}
+      </button>`).join("");
+    document.querySelectorAll("[data-s]").forEach(btn => btn.addEventListener("click", () => {
+      activeStatus = btn.dataset.s; renderFilterBtns(); renderTable();
+    }));
+  }
+
+  function renderTable(){
+    const search = document.getElementById("searchInput").value.trim().toLowerCase();
+    const filtered = allRegs.filter(r => {
+      const matchStatus = activeStatus === "all" || r.status === activeStatus;
+      const matchSearch = !search || r.attendee.toLowerCase().includes(search) || r.mob.includes(search);
+      return matchStatus && matchSearch;
+    });
+
+    if (filtered.length === 0){
+      document.getElementById("tableWrap").innerHTML = `<div class="empty-state">No registrations match that filter.</div>`;
+      return;
+    }
+
+    document.getElementById("tableWrap").innerHTML = `
+      <table class="table table-foyer w-100 mb-0">
+        <thead>
+          <tr>
+            <th>#</th><th>Attendee</th><th>Mobile</th><th>Status</th>
+            <th>Paid</th><th>Registered</th><th>Check-in</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map((r, i) => `
+            <tr>
+              <td class="text-muted ff-mono" style="font-size:11px;">${i+1}</td>
+              <td class="fw-semibold">${esc(r.attendee)}</td>
+              <td class="ff-mono" style="font-size:12px;">${esc(r.mob)}</td>
+              <td>${pillHtml(r.status)}</td>
+              <td class="ff-mono">${r.amount_paid ? fmtMoney(r.amount_paid) : '<span class="text-muted">Free</span>'}</td>
+              <td class="text-muted" style="font-size:12px;">${fmtDate(r.registered_at)}</td>
+              <td>
+                ${r.checked_in
+                  ? `<span class="text-success fw-bold" style="font-size:12px;"><i class="bi bi-check-circle-fill"></i> Checked in</span>`
+                  : r.status === "cancelled"
+                    ? `<span class="text-muted" style="font-size:12px;">—</span>`
+                    : `<button class="btn btn-outline-foyer btn-sm" data-checkin="${r.id}"><i class="bi bi-qr-code-scan"></i> Check in</button>`
+                }
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+
+    document.querySelectorAll("[data-checkin]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.checkin;
+        btn.disabled = true; btn.innerHTML = `<span class="spinner-foyer" style="width:12px;height:12px;border-width:2px;"></span>`;
+        await apiCheckIn(id);
+        allRegs = allRegs.map(r => String(r.id) === String(id) ? {...r, checked_in:true, status:"attended"} : r);
+        renderStats(); renderTable();
+        showToast("Attendee checked in.");
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("searchInput").addEventListener("input", renderTable);
+
+    apiFetchEventBySlug(slug).then(ev => {
+      document.getElementById("eventHeader").innerHTML = `
+        <h1 class="ff-display fw-bold mb-1" style="font-size:24px;">${esc(ev.title)}</h1>
+        <p class="text-muted mb-0" style="font-size:13px;">${fmtDate(ev.start_date)} · ${ev.is_online ? "Online" : esc(ev.location)}</p>`;
+    });
+
+    apiFetchEventRegistrations(slug).then(regs => {
+      allRegs = regs;
+      renderStats();
+      renderFilterBtns();
+      renderTable();
+    });
+  });
+</script>
+</body>
+</html>
