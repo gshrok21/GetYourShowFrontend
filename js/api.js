@@ -12,138 +12,199 @@
    Claude's in-chat file preview, only after you download and
    host them yourself.
    ========================================================= */
-
 const API_BASE = "https://getyourshow.onrender.com";
 
-function getToken(){ return localStorage.getItem("foyer_token"); }
-function getUser(){ try{ return JSON.parse(localStorage.getItem("foyer_user")); }catch(e){ return null; } }
-function setSession(token, user){ localStorage.setItem("foyer_token", token); localStorage.setItem("foyer_user", JSON.stringify(user)); }
-function clearSession(){ localStorage.removeItem("foyer_token"); localStorage.removeItem("foyer_user"); }
+/* ---------------- Local Storage ---------------- */
+function getToken(){
+  return localStorage.getItem("foyer_token");
+}
 
+function getUser(){
+  try {
+    return JSON.parse(localStorage.getItem("foyer_user"));
+  } catch(e){
+    return null;
+  }
+}
+
+function setSession(token, user){
+  console.log("Saving session:", token, user); // debug
+  localStorage.setItem("foyer_token", token);
+  localStorage.setItem("foyer_user", JSON.stringify(user));
+}
+
+function clearSession(){
+  localStorage.removeItem("foyer_token");
+  localStorage.removeItem("foyer_user");
+}
+
+/* ---------------- Auth Guards ---------------- */
 function requireAuth(){
-  if (!getToken()){ window.location.href = "login.html"; return null; }
+  if (!getToken()){
+    window.location.href = "login.html";
+    return null;
+  }
   return getUser();
 }
+
 function requireOrganizer(){
   const u = requireAuth();
-  if (u && !u.is_seller){ window.location.href = "index.html"; return null; }
+  if (u && !u.is_seller){
+    window.location.href = "index.html";
+    return null;
+  }
   return u;
 }
 
+/* ---------------- API Request ---------------- */
 async function apiRequest(path, options = {}){
-  try{
+  try {
     const token = getToken();
+
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Token ${token}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}), // ✅ FIXED
         ...(options.headers || {}),
       },
     });
-    if (!res.ok) throw new Error(String(res.status));
+
+    if (!res.ok) throw new Error(res.status);
+
     if (res.status === 204) return {};
+
     return await res.json();
-  }catch(err){
-    return null; // signal: caller should fall back to demo data
+
+  } catch(err){
+    console.error("API ERROR:", err);
+    return null;
   }
 }
 
-/* ---------------- Auth ----------------
-   USERNAME_FIELD on CustomUser_details is 'mob' */
+/* ---------------- LOGIN ---------------- */
 async function apiLogin(mob, password){
-  const data = await apiRequest("/auth/token/", { method:"POST", body: JSON.stringify({ mob, password }) });
-  if (data) return data;
-  const match = DEMO.users.find(u => u.mob === mob);
-  if (!match) return { error: "No account with that mobile number (demo: try 9876543210)." };
-  return { token: "demo-token-" + match.id, user: match };
+  const data = await apiRequest("/auth/token/", {
+    method: "POST",
+    body: JSON.stringify({ mob, password })
+  });
+
+  console.log("Login response:", data);
+
+  if (data && data.access){
+    return {
+      token: data.access
+    };
+  }
+
+  return { error: "Invalid credentials" };
 }
 
+/* ---------------- LOGIN FLOW (IMPORTANT) ---------------- */
+async function loginFlow(mob, password){
+  const login = await apiLogin(mob, password);
+
+  if (!login || !login.token){
+    alert("Login failed");
+    return;
+  }
+
+  // ✅ Fetch user after login
+  const user = await apiRequest("/auth/me/", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${login.token}`
+    }
+  });
+
+  if (!user){
+    alert("Failed to fetch user");
+    return;
+  }
+
+  setSession(login.token, user);
+
+  // redirect after login
+  window.location.href = "index.html";
+}
+
+/* ---------------- REGISTER ---------------- */
 async function apiRegisterUser(payload){
-  const data = await apiRequest("/user/", { method:"POST", body: JSON.stringify(payload) });
-  if (data) return data;
-  const newUser = {
-    id: 100 + DEMO.users.length, username: payload.username, first_name: payload.first_name,
-    last_name: payload.last_name, email: payload.email, mob: payload.mob, is_seller: !!payload.is_seller,
-  };
-  return { token: "demo-token-" + newUser.id, user: newUser };
+  const data = await apiRequest("/user/", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  return data;
 }
 
-/* ---------------- Categories (event_category model) ---------------- */
+/* ---------------- Categories ---------------- */
 async function apiFetchCategories(){
   const data = await apiRequest("/categories/", { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.categories;
+  return data?.results || data || [];
 }
 
 /* ---------------- Events ---------------- */
 async function apiFetchEvents(){
   const data = await apiRequest("/list/event/", { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.events;
+  return data?.results || data || [];
 }
+
 async function apiFetchEventBySlug(slug){
-  const data = await apiRequest(`/list/event/${slug}/`, { method:"GET" });
-  if (data) return data;
-  return DEMO.events.find(e => e.slug === slug) || DEMO.events[0];
+  return await apiRequest(`/list/event/${slug}/`, { method:"GET" });
 }
+
 async function apiFetchMyEvents(){
   const data = await apiRequest("/events/my-events/", { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.events.filter(e => e.organizer === "you");
+  return data?.results || data || [];
 }
+
 async function apiCreateEvent(payload){
-  const data = await apiRequest("/list/event/", { method:"POST", body: JSON.stringify(payload) });
-  if (data) return data;
-  return { ...payload, id: Date.now(), slug: payload.title.toLowerCase().replace(/\s+/g,"-"), organizer:"you" };
+  return await apiRequest("/list/event/", {
+    method:"POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 /* ---------------- Registrations ---------------- */
 async function apiFetchMyBookings(){
-  const data = await apiRequest("/registration", { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.bookings;
+  const data = await apiRequest("/registration/", { method:"GET" });
+  return data?.results || data || [];
 }
+
 async function apiFetchBookingById(id){
-  const data = await apiRequest(`/registration/${id}`, { method:"GET" });
-  if (data) return data;
-  return DEMO.bookings.find(b => String(b.id) === String(id));
+  return await apiRequest(`/registration/${id}/`, { method:"GET" });
 }
+
 async function apiRegisterForEvent(eventId, notes){
-  const data = await apiRequest("/registration/", { method:"POST", body: JSON.stringify({ event: eventId, notes }) });
-  if (data) return data;
-  const event = DEMO.events.find(e => e.id === eventId);
-  return {
-    id: Date.now(), event, status: "confirmed",
-    ticket_code: "demo-" + Math.random().toString(36).slice(2, 10),
-    notes, amount_paid: event.is_free ? 0 : event.price,
-    checked_in: false, registered_at: new Date().toISOString(),
-  };
+  return await apiRequest("/registration/", {
+    method:"POST",
+    body: JSON.stringify({ event: eventId, notes })
+  });
 }
+
 async function apiCancelRegistration(id){
-  const data = await apiRequest(`/registration/${id}/cancel/`, { method:"POST" });
-  return data || { detail: "Cancelled (demo)" };
+  return await apiRequest(`/registration/${id}/cancel/`, { method:"POST" });
 }
+
 async function apiFetchEventRegistrations(slug){
   const data = await apiRequest(`/event/${slug}/registrations/`, { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.eventRegistrations;
+  return data?.results || data || [];
 }
+
 async function apiCheckIn(id){
-  const data = await apiRequest(`/registration/${id}/check-in/`, { method:"POST" });
-  return data || { detail: "Checked in (demo)" };
+  return await apiRequest(`/registration/${id}/check-in/`, { method:"POST" });
 }
 
 /* ---------------- Payments ---------------- */
 async function apiFetchPayments(){
   const data = await apiRequest("/payments/", { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.payments;
+  return data?.results || data || [];
 }
+
 async function apiFetchOrgRevenue(){
   const data = await apiRequest("/payments/organizer-summary/", { method:"GET" });
-  if (data) return data.results || data;
-  return DEMO.orgRevenue;
+  return data?.results || data || [];
 }
 
 /* ---------------- Notifications ---------------- */
